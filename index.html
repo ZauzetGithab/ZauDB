@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>XZET Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Orbitron', sans-serif;
+      background: url("https://d.top4top.io/p_3487u28a61.jpg") no-repeat center/cover fixed;
+      color:#fff; height:100vh; display:flex; align-items:center; justify-content:center;
+      overflow-x: hidden;
+    }
+    .wrap {
+      background: rgba(20,20,20,.9);
+      padding:30px;
+      border-radius:12px;
+      box-shadow:0 0 25px rgba(0,255,255,.4);
+      width:90%; max-width:500px; text-align:center;
+      animation: zoomIn 0.7s ease;
+    }
+    @keyframes zoomIn {
+      from { transform: scale(0.7); opacity:0; }
+      to { transform: scale(1); opacity:1; }
+    }
+    input, select, button {
+      width:100%; padding:10px; margin:10px 0;
+      border:none; border-radius:6px; font-family:'Orbitron',sans-serif;
+    }
+    input, select {
+      background:#111; color:#0ff; border:1px solid #0ff;
+    }
+    button {
+      background:#0ff; color:#000; font-weight:bold; cursor:pointer;
+      transition:all .2s ease;
+    }
+    button:hover { background:#09f; color:#fff; }
+    .hidden { display:none; }
+    ul { text-align:left; margin-top:10px; }
+    ul li { margin:5px 0; }
+
+    /* Sidebar (garis tiga) */
+    #menuBtn {
+      position:fixed; top:20px; left:20px; width:40px; height:40px;
+      background:#0ff; border-radius:6px; cursor:pointer; z-index:1000;
+      display:none; align-items:center; justify-content:center;
+      box-shadow:0 0 10px #0ff;
+    }
+    #menuBtn div {
+      width:20px; height:3px; background:#000; margin:3px 0;
+    }
+    #sidebar {
+      position:fixed; top:0; left:-250px; width:250px; height:100%;
+      background:rgba(10,10,10,.95); box-shadow:2px 0 15px #000;
+      transition:left 0.3s ease; padding:20px; z-index:999;
+    }
+    #sidebar.active { left:0; }
+    #sidebar h3 { margin-bottom:20px; color:#0ff; }
+    #sidebar button {
+      background:#111; color:#0ff; border:1px solid #0ff; width:100%;
+      margin:5px 0;
+    }
+    #sidebar button:hover { background:#0ff; color:#000; }
+  </style>
+</head>
+<body>
+
+<div id="menuBtn"><div></div><div></div><div></div></div>
+
+<div id="sidebar">
+  <h3>Menu</h3>
+  <button onclick="showPanel('bug')">Vior Crashed</button>
+  <button onclick="showPanel('create')">Create User</button>
+  <button onclick="showPanel('list')">List Users</button>
+  <button onclick="logout()">Logout</button>
+</div>
+
+<div id="login" class="wrap">
+  <h2>Login Sevior</h2>
+  <input id="lu" placeholder="Username">
+  <input id="lp" type="password" placeholder="Password">
+  <button onclick="doLogin()">Login</button>
+  <p id="msg" style="color:red;"></p>
+</div>
+
+<div id="dashboard" class="wrap hidden">
+  <h2 id="welcome">Welcome</h2>
+  <div id="Bug Sevior">
+    <h3>⚡ Bug Sevior</h3>
+    <input id="target" placeholder="Nomor target 62xxxx">
+    <button onclick="sendBug('ios')">Crash iPhone</button>
+    <button onclick="sendBug('android')">Crash Android</button>
+  </div>
+  <div id="createPanel" class="hidden">
+    <h3>➕ Create User</h3>
+    <input id="nu" placeholder="Username baru">
+    <input id="np" placeholder="Password baru">
+    <input id="days" type="number" placeholder="Durasi (hari)">
+    <select id="role">
+      <option value="member">Member</option>
+      <option value="reseller">Reseller</option>
+      <option value="admin">Admin</option>
+    </select>
+    <button onclick="createUser()">Create</button>
+  </div>
+  <div id="listPanel" class="hidden">
+    <h3>📋 List Users</h3>
+    <ul id="userList"></ul>
+  </div>
+  <!-- Logout khusus member -->
+  <button id="logoutBtn" class="hidden" onclick="logout()">Logout</button>
+</div>
+
+<script>
+const owner = { username:"owner", password:"owner123", role:"owner" };
+let users = JSON.parse(localStorage.getItem("users") || "[]");
+let currentUser = null;
+
+function saveUsers(){ localStorage.setItem("users", JSON.stringify(users)); }
+function isExpired(u){ return u.expired && Date.now() > u.expired; }
+
+function doLogin(){
+  const u=lu.value.trim(), p=lp.value.trim(); msg.textContent="";
+  if(u===owner.username && p===owner.password){
+    showDashboard(owner); return;
+  }
+  const me = users.find(x=>x.username===u && x.password===p);
+  if(!me || isExpired(me)){ msg.textContent="Login gagal/expired"; return; }
+  showDashboard(me);
+}
+
+function showDashboard(me){
+  login.classList.add("hidden");
+  dashboard.classList.remove("hidden");
+  currentUser = me;
+  welcome.textContent=`Halo, ${me.username}`;
+
+  // Sidebar hanya untuk owner/admin/reseller
+  if(me.role==="owner" || me.role==="admin" || me.role==="reseller"){
+    menuBtn.style.display="flex";
+    logoutBtn.classList.add("hidden"); // mereka pakai tombol logout di sidebar
+  } else {
+    menuBtn.style.display="none";      // member gak punya sidebar
+    logoutBtn.classList.remove("hidden"); // tapi tetap ada tombol logout
+  }
+}
+
+function showPanel(panel){
+  [bugPanel,createPanel,listPanel].forEach(x=>x.classList.add("hidden"));
+  if(panel==="bug") bugPanel.classList.remove("hidden");
+  if(panel==="create" && (currentUser.role==="owner"||currentUser.role==="admin"||currentUser.role==="reseller")) createPanel.classList.remove("hidden");
+  if(panel==="list" && (currentUser.role==="owner"||currentUser.role==="admin")) {
+    listPanel.classList.remove("hidden");
+    listUsers();
+  }
+}
+
+function createUser(){
+  const u=nu.value.trim(), p=np.value.trim(), d=parseInt(days.value)||0, r=role.value;
+  if(!u||!p||d<=0){ alert("Isi semua field!"); return; }
+  if(users.some(x=>x.username===u)){ alert("Username sudah ada!"); return; }
+  if(currentUser.role==="reseller" && r!=="member"){ alert("Reseller hanya bisa buat Member"); return; }
+  const exp = Date.now()+d*86400000;
+  users.push({username:u,password:p,role:r,expired:exp});
+  saveUsers();
+  alert(`User ${u} (${r}) dibuat, expired ${d} hari`);
+  nu.value=np.value=days.value="";
+}
+
+function listUsers(){
+  userList.innerHTML = users.map(x=>`<li>${x.username} (${x.role}) - Exp: ${new Date(x.expired).toLocaleDateString()}</li>`).join("");
+}
+
+function sendBug(mode){
+  const t=target.value.trim();
+  if(!t.startsWith("62")) return alert("Nomor harus 62xxxx");
+  alert(`(DEMO) Bug terkirim ke ${t} (${mode})`);
+}
+
+function logout(){ location.reload(); }
+menuBtn.onclick=()=> sidebar.classList.toggle("active");
+</script>
+</body>
+            </html>

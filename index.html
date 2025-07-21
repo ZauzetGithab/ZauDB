@@ -40,8 +40,6 @@
     .hidden { display:none; }
     ul { text-align:left; margin-top:10px; }
     ul li { margin:5px 0; }
-
-    /* Sidebar (garis tiga) */
     #menuBtn {
       position:fixed; top:20px; left:20px; width:40px; height:40px;
       background:#0ff; border-radius:6px; cursor:pointer; z-index:1000;
@@ -87,7 +85,7 @@
 
 <div id="dashboard" class="wrap hidden">
   <h2 id="welcome">Welcome</h2>
-  <div id="Bug Sevior">
+  <div id="bugPanel">
     <h3>⚡ Bug Sevior</h3>
     <input id="target" placeholder="Nomor target 62xxxx">
     <button onclick="sendBug('ios')">Crash iPhone</button>
@@ -109,19 +107,32 @@
     <h3>📋 List Users</h3>
     <ul id="userList"></ul>
   </div>
-  <!-- Logout khusus member -->
   <button id="logoutBtn" class="hidden" onclick="logout()">Logout</button>
 </div>
 
 <script>
+const GITHUB_RAW_URL = "https://raw.githubusercontent.com/USERNAME/REPO/main/users.json"; // ganti sesuai GitHub lo
 const owner = { username:"owner", password:"owner123", role:"owner" };
-let users = JSON.parse(localStorage.getItem("users") || "[]");
+let users = [];
 let currentUser = null;
 
-function saveUsers(){ localStorage.setItem("users", JSON.stringify(users)); }
+const bugPanel = document.getElementById("bugPanel");
+const createPanel = document.getElementById("createPanel");
+const listPanel = document.getElementById("listPanel");
+
+async function loadUsers(){
+  try {
+    const res = await fetch(GITHUB_RAW_URL+"?t="+Date.now());
+    users = await res.json();
+  } catch(e){
+    users = [];
+  }
+}
+
 function isExpired(u){ return u.expired && Date.now() > u.expired; }
 
-function doLogin(){
+async function doLogin(){
+  await loadUsers();
   const u=lu.value.trim(), p=lp.value.trim(); msg.textContent="";
   if(u===owner.username && p===owner.password){
     showDashboard(owner); return;
@@ -136,37 +147,51 @@ function showDashboard(me){
   dashboard.classList.remove("hidden");
   currentUser = me;
   welcome.textContent=`Halo, ${me.username}`;
-
-  // Sidebar hanya untuk owner/admin/reseller
   if(me.role==="owner" || me.role==="admin" || me.role==="reseller"){
     menuBtn.style.display="flex";
-    logoutBtn.classList.add("hidden"); // mereka pakai tombol logout di sidebar
+    logoutBtn.classList.add("hidden");
   } else {
-    menuBtn.style.display="none";      // member gak punya sidebar
-    logoutBtn.classList.remove("hidden"); // tapi tetap ada tombol logout
+    menuBtn.style.display="none";
+    logoutBtn.classList.remove("hidden");
   }
 }
 
 function showPanel(panel){
   [bugPanel,createPanel,listPanel].forEach(x=>x.classList.add("hidden"));
   if(panel==="bug") bugPanel.classList.remove("hidden");
-  if(panel==="create" && (currentUser.role==="owner"||currentUser.role==="admin"||currentUser.role==="reseller")) createPanel.classList.remove("hidden");
+  if(panel==="create" && (currentUser.role!=="member")) createPanel.classList.remove("hidden");
   if(panel==="list" && (currentUser.role==="owner"||currentUser.role==="admin")) {
     listPanel.classList.remove("hidden");
     listUsers();
   }
 }
 
-function createUser(){
+async function createUser(){
+  await loadUsers();
   const u=nu.value.trim(), p=np.value.trim(), d=parseInt(days.value)||0, r=role.value;
   if(!u||!p||d<=0){ alert("Isi semua field!"); return; }
   if(users.some(x=>x.username===u)){ alert("Username sudah ada!"); return; }
   if(currentUser.role==="reseller" && r!=="member"){ alert("Reseller hanya bisa buat Member"); return; }
   const exp = Date.now()+d*86400000;
   users.push({username:u,password:p,role:r,expired:exp});
-  saveUsers();
+  await updateUsers();
   alert(`User ${u} (${r}) dibuat, expired ${d} hari`);
   nu.value=np.value=days.value="";
+}
+
+async function updateUsers(){
+  await fetch(GITHUB_RAW_URL.replace("raw.githubusercontent.com","api.github.com/repos").replace("/main/","/contents/"), {
+    method: "PUT",
+    headers: {
+      "Authorization": "Bearer GITHUB_TOKEN", // taruh token lo di sini
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      message: "Update users.json",
+      content: btoa(JSON.stringify(users,null,2)),
+      sha: "" // biar bisa overwrite
+    })
+  });
 }
 
 function listUsers(){
@@ -183,4 +208,4 @@ function logout(){ location.reload(); }
 menuBtn.onclick=()=> sidebar.classList.toggle("active");
 </script>
 </body>
-            </html>
+</html>

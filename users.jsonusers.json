@@ -4,11 +4,5 @@
     "password": "owner123",
     "role": "owner",
     "expired": null
-  },
-  {
-    "username": "Alka",
-    "password": "Alka",
-    "role": "member",
-    "expired": "2025-07-23"
   }
 ]

@@ -115,39 +115,25 @@
 </div>
 
 <script>
-const GITHUB_RAW_URL = "https://raw.githubusercontent.com/ZauzetGithab/ZauDB/main/users.json";
-const GITHUB_TOKEN = "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";
-
 const owner = { username:"owner", password:"owner123", role:"owner" };
 let users = [];
 let currentUser = null;
 
-const bugPanel = document.getElementById("bugPanel");
-const createPanel = document.getElementById("createPanel");
-const listPanel = document.getElementById("listPanel");
-
-async function loadUsers(){
-  try {
-    const res = await fetch(GITHUB_RAW_URL+"?t="+Date.now());
-    users = await res.json();
-  } catch(e){
-    users = [];
-  }
-}
-
-function isExpired(u){
-  if (!u.expired) return false;
-  return new Date(u.expired) < new Date();
+async function fetchUsers(){
+  const res = await fetch("/api/users");
+  users = await res.json();
 }
 
 async function doLogin(){
-  await loadUsers();
+  await fetchUsers();
   const u=lu.value.trim(), p=lp.value.trim(); msg.textContent="";
   if(u===owner.username && p===owner.password){
     showDashboard(owner); return;
   }
   const me = users.find(x=>x.username===u && x.password===p);
-  if(!me || isExpired(me)){ msg.textContent="Login gagal/expired"; return; }
+  if(!me || (me.expired && new Date(me.expired) < new Date())) {
+    msg.textContent="Login gagal/expired"; return;
+  }
   showDashboard(me);
 }
 
@@ -176,14 +162,13 @@ function showPanel(panel){
 }
 
 async function createUser(){
-  await loadUsers();
   const u=nu.value.trim(), p=np.value.trim(), d=parseInt(days.value)||0, r=role.value;
   if(!u||!p||d<=0){ alert("Isi semua field!"); return; }
-  if(users.some(x=>x.username===u)){ alert("Username sudah ada!"); return; }
-  if(currentUser.role==="reseller" && r!=="member"){ alert("Reseller hanya bisa buat Member"); return; }
   const expDate = new Date(Date.now()+d*86400000).toISOString().split("T")[0];
-  users.push({username:u,password:p,role:r,expired:expDate});
-  await updateUsers();
+  await fetch("/api/users", {
+    method:"POST", headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ username:u, password:p, role:r, expired:expDate })
+  });
   alert(`User ${u} (${r}) dibuat, expired: ${expDate}`);
   nu.value=np.value=days.value="";
   listUsers();
@@ -192,40 +177,15 @@ async function createUser(){
 async function deleteUser(username){
   if(currentUser.role!=="owner"){ alert("Hanya Owner yang bisa hapus user!"); return; }
   if(!confirm(`Hapus user ${username}?`)) return;
-  users = users.filter(u=>u.username!==username);
-  await updateUsers();
+  await fetch("/api/users", {
+    method:"DELETE", headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ username })
+  });
   listUsers();
 }
 
-async function updateUsers(){
-  const apiUrl = GITHUB_RAW_URL
-    .replace("https://raw.githubusercontent.com", "https://api.github.com/repos")
-    .replace("/main/", "/contents/");
-
-  const filePath = "users.json";
-
-  const getFile = await fetch(apiUrl + filePath, {
-    method: "GET",
-    headers: { "Authorization": `token ${GITHUB_TOKEN}` }
-  });
-  const fileData = await getFile.json();
-  const sha = fileData.sha;
-
-  await fetch(apiUrl + filePath, {
-    method: "PUT",
-    headers: {
-      "Authorization": `token ${GITHUB_TOKEN}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      message: "Update users.json",
-      content: btoa(JSON.stringify(users, null, 2)),
-      sha
-    })
-  });
-}
-
-function listUsers(){
+async function listUsers(){
+  await fetchUsers();
   userList.innerHTML = users.map(x=>{
     const delBtn = currentUser.role==="owner" ? `<button onclick="deleteUser('${x.username}')">Hapus</button>` : "";
     return `<li>${x.username} (${x.role}) - Exp: ${x.expired||"Unlimited"} ${delBtn}</li>`;

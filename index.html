@@ -38,8 +38,12 @@
     }
     button:hover { background:#09f; color:#fff; }
     .hidden { display:none; }
-    ul { text-align:left; margin-top:10px; }
-    ul li { margin:5px 0; }
+    ul { text-align:left; margin-top:10px; list-style:none; padding:0; }
+    ul li { margin:5px 0; display:flex; justify-content:space-between; align-items:center; }
+    ul li button {
+      background:#f33; color:#fff; font-size:12px; padding:5px 10px; border:none;
+    }
+    ul li button:hover { background:#c00; }
     #menuBtn {
       position:fixed; top:20px; left:20px; width:40px; height:40px;
       background:#0ff; border-radius:6px; cursor:pointer; z-index:1000;
@@ -111,7 +115,9 @@
 </div>
 
 <script>
-const GITHUB_RAW_URL = "https://raw.githubusercontent.com/ZauzetGithab/ZauDB/main/users.json"; // ganti sesuai GitHub lo
+const GITHUB_RAW_URL = "https://raw.githubusercontent.com/ZauzetGithab/ZauDB/main/users.json";
+const GITHUB_TOKEN = "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";
+
 const owner = { username:"owner", password:"owner123", role:"owner" };
 let users = [];
 let currentUser = null;
@@ -129,7 +135,10 @@ async function loadUsers(){
   }
 }
 
-function isExpired(u){ return u.expired && Date.now() > u.expired; }
+function isExpired(u){
+  if (!u.expired) return false;
+  return new Date(u.expired) < new Date();
+}
 
 async function doLogin(){
   await loadUsers();
@@ -172,30 +181,55 @@ async function createUser(){
   if(!u||!p||d<=0){ alert("Isi semua field!"); return; }
   if(users.some(x=>x.username===u)){ alert("Username sudah ada!"); return; }
   if(currentUser.role==="reseller" && r!=="member"){ alert("Reseller hanya bisa buat Member"); return; }
-  const exp = Date.now()+d*86400000;
-  users.push({username:u,password:p,role:r,expired:exp});
+  const expDate = new Date(Date.now()+d*86400000).toISOString().split("T")[0];
+  users.push({username:u,password:p,role:r,expired:expDate});
   await updateUsers();
-  alert(`User ${u} (${r}) dibuat, expired ${d} hari`);
+  alert(`User ${u} (${r}) dibuat, expired: ${expDate}`);
   nu.value=np.value=days.value="";
+  listUsers();
+}
+
+async function deleteUser(username){
+  if(currentUser.role!=="owner"){ alert("Hanya Owner yang bisa hapus user!"); return; }
+  if(!confirm(`Hapus user ${username}?`)) return;
+  users = users.filter(u=>u.username!==username);
+  await updateUsers();
+  listUsers();
 }
 
 async function updateUsers(){
-  await fetch(GITHUB_RAW_URL.replace("raw.githubusercontent.com","api.github.com/repos").replace("/main/","/contents/"), {
+  const apiUrl = GITHUB_RAW_URL
+    .replace("https://raw.githubusercontent.com", "https://api.github.com/repos")
+    .replace("/main/", "/contents/");
+
+  const filePath = "users.json";
+
+  const getFile = await fetch(apiUrl + filePath, {
+    method: "GET",
+    headers: { "Authorization": `token ${GITHUB_TOKEN}` }
+  });
+  const fileData = await getFile.json();
+  const sha = fileData.sha;
+
+  await fetch(apiUrl + filePath, {
     method: "PUT",
     headers: {
-      "Authorization": "Bearer GITHUB_TOKEN", // taruh token lo di sini
+      "Authorization": `token ${GITHUB_TOKEN}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
       message: "Update users.json",
-      content: btoa(JSON.stringify(users,null,2)),
-      sha: "" // biar bisa overwrite
+      content: btoa(JSON.stringify(users, null, 2)),
+      sha
     })
   });
 }
 
 function listUsers(){
-  userList.innerHTML = users.map(x=>`<li>${x.username} (${x.role}) - Exp: ${new Date(x.expired).toLocaleDateString()}</li>`).join("");
+  userList.innerHTML = users.map(x=>{
+    const delBtn = currentUser.role==="owner" ? `<button onclick="deleteUser('${x.username}')">Hapus</button>` : "";
+    return `<li>${x.username} (${x.role}) - Exp: ${x.expired||"Unlimited"} ${delBtn}</li>`;
+  }).join("");
 }
 
 function sendBug(mode){
